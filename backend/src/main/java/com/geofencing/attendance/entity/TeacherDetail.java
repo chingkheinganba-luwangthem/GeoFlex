@@ -27,4 +27,12 @@ public class TeacherDetail {
     private Double longitude;
     private Double radius = 100.0;
     private boolean attendanceActive = false;
+
+    @ManyToOne
+    @JoinColumn(name = "session_department_id")
+    private Department sessionDepartment;
+
+    @ManyToOne
+    @JoinColumn(name = "session_section_id")
+    private Section sessionSection;
 }

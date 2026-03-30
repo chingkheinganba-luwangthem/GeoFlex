@@ -1,0 +1,4 @@
+-------------------------------------------------------------------------------
+Test set: com.geofencing.attendance.controller.AdminControllerTest
+-------------------------------------------------------------------------------
+Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 5.300 s -- in com.geofencing.attendance.controller.AdminControllerTest

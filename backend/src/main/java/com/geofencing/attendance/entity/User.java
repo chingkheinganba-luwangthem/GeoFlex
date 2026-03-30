@@ -30,6 +30,17 @@ public class User {
     @Column(nullable = false)
     private Role role;
 
+    @Column(length = 20)
+    private String phone;
+
+    @ManyToOne
+    @JoinColumn(name = "department_id")
+    private Department department;
+
+    @ManyToOne
+    @JoinColumn(name = "section_id")
+    private Section section;
+
     @Column(length = 500)
     private String profilePicture;
 

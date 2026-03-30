@@ -23,10 +23,17 @@ public class AttendanceService {
     private TeacherDetailRepository teacherDetailRepository;
 
     @Autowired
+    private DepartmentRepository departmentRepository;
+
+    @Autowired
+    private SectionRepository sectionRepository;
+
+    @Autowired
     private GeofencingService geofencingService;
 
-    // Teacher starts attendance session
-    public TeacherDetail startSession(Long teacherId, double lat, double lon, double radius, String subject) {
+    // Teacher starts attendance session with department + section
+    public TeacherDetail startSession(Long teacherId, double lat, double lon, double radius, String subject,
+            Long departmentId, Long sectionId) {
         TeacherDetail detail = teacherDetailRepository.findByTeacherId(teacherId)
                 .orElseThrow(() -> new RuntimeException("Teacher details not found"));
         detail.setLatitude(lat);
@@ -34,10 +41,24 @@ public class AttendanceService {
         detail.setRadius(radius);
         detail.setSubject(subject);
         detail.setAttendanceActive(true);
+
+        // Set target department and section
+        if (departmentId != null) {
+            Department dept = departmentRepository.findById(departmentId)
+                    .orElseThrow(() -> new RuntimeException("Department not found"));
+            detail.setSessionDepartment(dept);
+        }
+        if (sectionId != null) {
+            Section sec = sectionRepository.findById(sectionId)
+                    .orElseThrow(() -> new RuntimeException("Section not found"));
+            detail.setSessionSection(sec);
+        }
+
         return teacherDetailRepository.save(detail);
     }
 
-    // Teacher stops attendance session — auto-mark absent students
+    // Teacher stops attendance session — auto-mark absent only for targeted
+    // dept/section
     public TeacherDetail stopSession(Long teacherId) {
         TeacherDetail detail = teacherDetailRepository.findByTeacherId(teacherId)
                 .orElseThrow(() -> new RuntimeException("Teacher details not found"));
@@ -45,11 +66,23 @@ public class AttendanceService {
         User teacher = userRepository.findById(teacherId)
                 .orElseThrow(() -> new RuntimeException("Teacher not found"));
 
-        // Get all students
-        List<User> allStudents = userRepository.findByRole(Role.STUDENT);
+        // Only mark absent for students in the session's target dept/section
+        List<User> targetStudents;
+        if (detail.getSessionDepartment() != null && detail.getSessionSection() != null) {
+            targetStudents = userRepository.findByRoleAndDepartmentIdAndSectionId(
+                    Role.STUDENT,
+                    detail.getSessionDepartment().getId(),
+                    detail.getSessionSection().getId());
+        } else if (detail.getSessionDepartment() != null) {
+            targetStudents = userRepository.findByRoleAndDepartmentId(
+                    Role.STUDENT,
+                    detail.getSessionDepartment().getId());
+        } else {
+            targetStudents = userRepository.findByRole(Role.STUDENT);
+        }
 
         // Mark absent for students who didn't mark attendance today
-        for (User student : allStudents) {
+        for (User student : targetStudents) {
             boolean alreadyMarked = attendanceRepository.existsByStudentIdAndTeacherIdAndDate(
                     student.getId(), teacherId, LocalDate.now());
             if (!alreadyMarked) {
@@ -67,6 +100,8 @@ public class AttendanceService {
         }
 
         detail.setAttendanceActive(false);
+        detail.setSessionDepartment(null);
+        detail.setSessionSection(null);
         return teacherDetailRepository.save(detail);
     }
 
@@ -79,18 +114,33 @@ public class AttendanceService {
             throw new RuntimeException("Attendance session is not active.");
         }
 
+        // Verify student belongs to the session's target dept/section
+        User student = userRepository.findById(studentId)
+                .orElseThrow(() -> new RuntimeException("Student not found"));
+
+        if (detail.getSessionDepartment() != null) {
+            if (student.getDepartment() == null ||
+                    !student.getDepartment().getId().equals(detail.getSessionDepartment().getId())) {
+                throw new RuntimeException("This session is not for your department.");
+            }
+        }
+        if (detail.getSessionSection() != null) {
+            if (student.getSection() == null ||
+                    !student.getSection().getId().equals(detail.getSessionSection().getId())) {
+                throw new RuntimeException("This session is not for your section.");
+            }
+        }
+
         // Check if already has a record for today
         java.util.Optional<Attendance> existing = attendanceRepository.findByStudentIdAndTeacherIdAndDate(
                 studentId, teacherId, LocalDate.now());
 
         if (existing.isPresent()) {
             Attendance record = existing.get();
-            // If already PRESENT, don't allow re-marking
             if (record.getStatus() == AttendanceStatus.PRESENT) {
                 throw new RuntimeException("Attendance already marked as PRESENT for today.");
             }
-            // If ABSENT, allow re-marking to PRESENT (teacher restarted session)
-            // Geofencing check first
+            // If ABSENT, allow re-marking to PRESENT
             boolean withinRadius = geofencingService.isWithinRadius(
                     detail.getLatitude(), detail.getLongitude(), lat, lon, detail.getRadius());
             if (!withinRadius) {
@@ -99,7 +149,6 @@ public class AttendanceService {
                 throw new RuntimeException("You are outside the geofence. Distance: " +
                         String.format("%.1f", distance) + "m (Radius: " + detail.getRadius() + "m)");
             }
-            // Update ABSENT → PRESENT
             record.setStatus(AttendanceStatus.PRESENT);
             record.setLatitude(lat);
             record.setLongitude(lon);
@@ -107,8 +156,7 @@ public class AttendanceService {
             return attendanceRepository.save(record);
         }
 
-        // No existing record — normal flow
-        // Geofencing check
+        // No existing record — normal flow with geofencing check
         boolean withinRadius = geofencingService.isWithinRadius(
                 detail.getLatitude(), detail.getLongitude(), lat, lon, detail.getRadius());
 
@@ -119,8 +167,6 @@ public class AttendanceService {
                     String.format("%.1f", distance) + "m (Radius: " + detail.getRadius() + "m)");
         }
 
-        User student = userRepository.findById(studentId)
-                .orElseThrow(() -> new RuntimeException("Student not found"));
         User teacher = userRepository.findById(teacherId)
                 .orElseThrow(() -> new RuntimeException("Teacher not found"));
 
@@ -191,19 +237,57 @@ public class AttendanceService {
         return stats;
     }
 
-    // Get active sessions (for students to see)
+    // Get active sessions — all (for backward compat)
     public List<Map<String, Object>> getActiveSessions() {
+        return buildSessionList(teacherDetailRepository.findAll().stream()
+                .filter(TeacherDetail::isAttendanceActive)
+                .collect(Collectors.toList()));
+    }
+
+    // Get active sessions filtered for a specific student's dept/section
+    public List<Map<String, Object>> getActiveSessionsForStudent(Long studentId) {
+        User student = userRepository.findById(studentId).orElse(null);
+        if (student == null)
+            return Collections.emptyList();
+
         List<TeacherDetail> activeDetails = teacherDetailRepository.findAll().stream()
                 .filter(TeacherDetail::isAttendanceActive)
+                .filter(detail -> {
+                    // If session has no dept/section set, show to all (backward compat)
+                    if (detail.getSessionDepartment() == null)
+                        return true;
+                    // Match department
+                    if (student.getDepartment() == null)
+                        return false;
+                    if (!student.getDepartment().getId().equals(detail.getSessionDepartment().getId()))
+                        return false;
+                    // Match section if specified
+                    if (detail.getSessionSection() != null) {
+                        if (student.getSection() == null)
+                            return false;
+                        return student.getSection().getId().equals(detail.getSessionSection().getId());
+                    }
+                    return true;
+                })
                 .collect(Collectors.toList());
 
+        return buildSessionList(activeDetails);
+    }
+
+    private List<Map<String, Object>> buildSessionList(List<TeacherDetail> details) {
         List<Map<String, Object>> sessions = new ArrayList<>();
-        for (TeacherDetail detail : activeDetails) {
+        for (TeacherDetail detail : details) {
             Map<String, Object> session = new HashMap<>();
             session.put("teacherId", detail.getTeacher().getId());
             session.put("teacherName", detail.getTeacher().getName());
             session.put("subject", detail.getSubject());
             session.put("radius", detail.getRadius());
+            if (detail.getSessionDepartment() != null) {
+                session.put("departmentName", detail.getSessionDepartment().getName());
+            }
+            if (detail.getSessionSection() != null) {
+                session.put("sectionName", detail.getSessionSection().getName());
+            }
             sessions.add(session);
         }
         return sessions;

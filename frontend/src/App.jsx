@@ -1,4 +1,5 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import LandingPage from './components/LandingPage';
 import Login from './components/Login';
 import Register from './components/Register';
 import AdminDashboard from './components/AdminDashboard';
@@ -10,8 +11,8 @@ function ProtectedRoute({ children, allowedRoles }) {
   const token = localStorage.getItem('token');
   const role = localStorage.getItem('role');
 
-  if (!token) return <Navigate to="/" replace />;
-  if (allowedRoles && !allowedRoles.includes(role)) return <Navigate to="/" replace />;
+  if (!token) return <Navigate to="/login" replace />;
+  if (allowedRoles && !allowedRoles.includes(role)) return <Navigate to="/login" replace />;
 
   return children;
 }
@@ -20,7 +21,8 @@ export default function App() {
   return (
     <Router>
       <Routes>
-        <Route path="/" element={<Login />} />
+        <Route path="/" element={<LandingPage />} />
+        <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
 
         <Route path="/admin" element={

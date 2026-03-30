@@ -77,9 +77,13 @@ public class StudentController {
         return ResponseEntity.ok(attendanceService.getStudentStats(studentId));
     }
 
-    // Get active sessions
+    // Get active sessions filtered by student's department/section
     @GetMapping("/active-sessions")
-    public ResponseEntity<?> getActiveSessions() {
+    public ResponseEntity<?> getActiveSessions(
+            @RequestParam(value = "studentId", required = false) Long studentId) {
+        if (studentId != null) {
+            return ResponseEntity.ok(attendanceService.getActiveSessionsForStudent(studentId));
+        }
         return ResponseEntity.ok(attendanceService.getActiveSessions());
     }
 

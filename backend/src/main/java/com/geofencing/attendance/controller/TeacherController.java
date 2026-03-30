@@ -24,9 +24,60 @@ public class TeacherController {
     private UserRepository userRepository;
 
     @Autowired
+    private DepartmentRepository departmentRepository;
+
+    @Autowired
+    private SectionRepository sectionRepository;
+
+    @Autowired
     private SimpMessagingTemplate messagingTemplate;
 
-    // Start session
+    // Get all departments
+    @GetMapping("/departments")
+    public ResponseEntity<?> getDepartments() {
+        return ResponseEntity.ok(departmentRepository.findAll());
+    }
+
+    // Get sections by department
+    @GetMapping("/sections")
+    public ResponseEntity<?> getSections(@RequestParam("departmentId") Long departmentId) {
+        return ResponseEntity.ok(sectionRepository.findByDepartmentId(departmentId));
+    }
+
+    // Get students by department and section
+    @GetMapping("/students")
+    public ResponseEntity<?> getStudents(
+            @RequestParam(value = "departmentId", required = false) Long departmentId,
+            @RequestParam(value = "sectionId", required = false) Long sectionId) {
+
+        List<User> students;
+        if (departmentId != null && sectionId != null) {
+            students = userRepository.findByRoleAndDepartmentIdAndSectionId(Role.STUDENT, departmentId, sectionId);
+        } else if (departmentId != null) {
+            students = userRepository.findByRoleAndDepartmentId(Role.STUDENT, departmentId);
+        } else {
+            students = userRepository.findByRole(Role.STUDENT);
+        }
+
+        List<Map<String, Object>> result = new ArrayList<>();
+        for (User s : students) {
+            Map<String, Object> m = new HashMap<>();
+            m.put("id", s.getId());
+            m.put("name", s.getName());
+            m.put("email", s.getEmail());
+            m.put("phone", s.getPhone());
+            if (s.getDepartment() != null) {
+                m.put("departmentName", s.getDepartment().getName());
+            }
+            if (s.getSection() != null) {
+                m.put("sectionName", s.getSection().getName());
+            }
+            result.add(m);
+        }
+        return ResponseEntity.ok(result);
+    }
+
+    // Start session with department + section targeting
     @PostMapping("/start-session")
     public ResponseEntity<?> startSession(@RequestBody Map<String, Object> request) {
         try {
@@ -36,7 +87,15 @@ public class TeacherController {
             double radius = Double.parseDouble(request.get("radius").toString());
             String subject = request.getOrDefault("subject", "General").toString();
 
-            TeacherDetail detail = attendanceService.startSession(teacherId, lat, lon, radius, subject);
+            Long departmentId = request.get("departmentId") != null
+                    ? Long.parseLong(request.get("departmentId").toString())
+                    : null;
+            Long sectionId = request.get("sectionId") != null
+                    ? Long.parseLong(request.get("sectionId").toString())
+                    : null;
+
+            TeacherDetail detail = attendanceService.startSession(
+                    teacherId, lat, lon, radius, subject, departmentId, sectionId);
 
             // Notify students via WebSocket
             Map<String, Object> notification = new HashMap<>();
@@ -44,6 +103,10 @@ public class TeacherController {
             notification.put("teacherId", teacherId);
             notification.put("teacherName", detail.getTeacher().getName());
             notification.put("subject", subject);
+            if (departmentId != null)
+                notification.put("departmentId", departmentId);
+            if (sectionId != null)
+                notification.put("sectionId", sectionId);
             messagingTemplate.convertAndSend("/topic/attendance", notification);
 
             Map<String, Object> response = new HashMap<>();

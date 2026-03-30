@@ -1,12 +1,14 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { authAPI } from '../utils/api';
+import logo from '../assets/logo.png';
 
 export default function Login() {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
+    const [showPassword, setShowPassword] = useState(false);
     const navigate = useNavigate();
 
     const handleLogin = async (e) => {
@@ -36,58 +38,92 @@ export default function Login() {
     };
 
     return (
-        <div className="auth-page">
-            <div className="auth-container">
-                <div className="auth-card">
-                    <div className="auth-logo">
-                        <div className="auth-logo-icon">📍</div>
-                        <h1 className="auth-title">GeoAttend</h1>
-                        <p className="auth-subtitle">Geofencing Attendance System</p>
+        <div className="auth-page-modern">
+            {/* Animated background orbs */}
+            <div className="auth-bg-orbs">
+                <div className="orb orb-1"></div>
+                <div className="orb orb-2"></div>
+                <div className="orb orb-3"></div>
+            </div>
+
+            {/* Back to landing */}
+            <Link to="/" className="auth-back-link">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="15 18 9 12 15 6" />
+                </svg>
+                Back to Home
+            </Link>
+
+            {/* Login Card */}
+            <div className="auth-card">
+                <div className="auth-card-header">
+                    <img src={logo} alt="GeoFlex" className="auth-logo auth-logo-round" />
+                    <h1>Welcome Back</h1>
+                    <p>Sign in to your GeoFlex account</p>
+                </div>
+
+                {error && (
+                    <div className="auth-error">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10" /><line x1="15" y1="9" x2="9" y2="15" /><line x1="9" y1="9" x2="15" y2="15" /></svg>
+                        {error}
                     </div>
+                )}
 
-                    {error && <div className="error-msg">{error}</div>}
-
-                    <form onSubmit={handleLogin}>
-                        <div className="form-group">
-                            <label className="form-label">Email</label>
+                <form onSubmit={handleLogin} className="auth-form">
+                    <div className="auth-field">
+                        <label>Email Address</label>
+                        <div className="auth-input-wrap">
+                            <svg className="auth-input-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <rect x="2" y="4" width="20" height="16" rx="2" /><polyline points="22,6 12,13 2,6" />
+                            </svg>
                             <input
                                 type="email"
-                                className="form-input"
-                                placeholder="Enter your email"
+                                placeholder="name@example.com"
                                 value={email}
-                                onChange={(e) => setEmail(e.target.value)}
+                                onChange={e => setEmail(e.target.value)}
                                 required
+                                autoComplete="email"
                             />
                         </div>
+                    </div>
 
-                        <div className="form-group">
-                            <label className="form-label">Password</label>
+                    <div className="auth-field">
+                        <label>Password</label>
+                        <div className="auth-input-wrap">
+                            <svg className="auth-input-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <rect x="3" y="11" width="18" height="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                            </svg>
                             <input
-                                type="password"
-                                className="form-input"
+                                type={showPassword ? 'text' : 'password'}
                                 placeholder="Enter your password"
                                 value={password}
-                                onChange={(e) => setPassword(e.target.value)}
+                                onChange={e => setPassword(e.target.value)}
                                 required
+                                autoComplete="current-password"
                             />
+                            <button type="button" className="auth-toggle-pw" onClick={() => setShowPassword(!showPassword)}>
+                                {showPassword ? '🙈' : '👁️'}
+                            </button>
                         </div>
-
-                        <button type="submit" className="btn btn-primary btn-block btn-lg" disabled={loading}>
-                            {loading ? '⏳ Signing in...' : '🔐 Sign In'}
-                        </button>
-                    </form>
-
-                    <div className="auth-footer">
-                        <p>Student? <a href="/register">Create an account</a></p>
                     </div>
 
-                    <div style={{ marginTop: '24px', padding: '16px', background: 'rgba(99,102,241,0.08)', borderRadius: '12px', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                        <strong style={{ color: 'var(--text-secondary)' }}>Demo Accounts:</strong><br />
-                        👑 Admin: admin@geofence.com / admin123<br />
-                        👨‍🏫 Teacher: teacher@geofence.com / teacher123<br />
-                        👨‍🎓 Student: student@geofence.com / student123
-                    </div>
+                    <button type="submit" className="auth-submit-btn" disabled={loading}>
+                        {loading ? (
+                            <><span className="auth-spinner"></span> Signing in...</>
+                        ) : (
+                            <>Sign In <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="5" y1="12" x2="19" y2="12" /><polyline points="12 5 19 12 12 19" /></svg></>
+                        )}
+                    </button>
+                </form>
+
+                <div className="auth-divider">
+                    <span>New here?</span>
                 </div>
+
+                <Link to="/register" className="auth-alt-link">
+                    Create an account
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="5" y1="12" x2="19" y2="12" /><polyline points="12 5 19 12 12 19" /></svg>
+                </Link>
             </div>
         </div>
     );

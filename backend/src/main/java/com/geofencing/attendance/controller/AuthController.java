@@ -19,6 +19,12 @@ public class AuthController {
     private UserRepository userRepository;
 
     @Autowired
+    private DepartmentRepository departmentRepository;
+
+    @Autowired
+    private SectionRepository sectionRepository;
+
+    @Autowired
     private PasswordEncoder passwordEncoder;
 
     @Autowired
@@ -50,12 +56,13 @@ public class AuthController {
         return ResponseEntity.ok(response);
     }
 
-    // Student self-registration
+    // Student self-registration with department/section
     @PostMapping("/register")
-    public ResponseEntity<?> register(@RequestBody Map<String, String> request) {
-        String name = request.get("name");
-        String email = request.get("email");
-        String password = request.get("password");
+    public ResponseEntity<?> register(@RequestBody Map<String, Object> request) {
+        String name = request.get("name") != null ? request.get("name").toString() : null;
+        String email = request.get("email") != null ? request.get("email").toString() : null;
+        String password = request.get("password") != null ? request.get("password").toString() : null;
+        String phone = request.get("phone") != null ? request.get("phone").toString() : null;
 
         if (name == null || email == null || password == null) {
             return ResponseEntity.badRequest().body(Map.of("error", "Name, email, and password are required"));
@@ -74,7 +81,29 @@ public class AuthController {
         student.setEmail(email);
         student.setPassword(passwordEncoder.encode(password));
         student.setRole(Role.STUDENT);
-        student.setDeviceId(request.getOrDefault("deviceId", null));
+        student.setPhone(phone);
+
+        if (request.containsKey("departmentId") && request.get("departmentId") != null) {
+            Long deptId = Long.parseLong(request.get("departmentId").toString());
+            Department dept = departmentRepository.findById(deptId).orElse(null);
+            if (dept == null) {
+                return ResponseEntity.badRequest().body(Map.of("error", "Invalid department"));
+            }
+            student.setDepartment(dept);
+        }
+
+        if (request.containsKey("sectionId") && request.get("sectionId") != null) {
+            Long secId = Long.parseLong(request.get("sectionId").toString());
+            Section section = sectionRepository.findById(secId).orElse(null);
+            if (section == null) {
+                return ResponseEntity.badRequest().body(Map.of("error", "Invalid section"));
+            }
+            student.setSection(section);
+        }
+
+        if (request.containsKey("deviceId") && request.get("deviceId") != null) {
+            student.setDeviceId(request.get("deviceId").toString());
+        }
 
         userRepository.save(student);
 
@@ -89,5 +118,17 @@ public class AuthController {
         response.put("message", "Registration successful");
 
         return ResponseEntity.ok(response);
+    }
+
+    // Public endpoint: get departments for registration dropdown
+    @GetMapping("/departments")
+    public ResponseEntity<?> getDepartments() {
+        return ResponseEntity.ok(departmentRepository.findAll());
+    }
+
+    // Public endpoint: get sections by department for registration dropdown
+    @GetMapping("/sections")
+    public ResponseEntity<?> getSections(@RequestParam("departmentId") Long departmentId) {
+        return ResponseEntity.ok(sectionRepository.findByDepartmentId(departmentId));
     }
 }
